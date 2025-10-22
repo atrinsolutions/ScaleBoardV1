@@ -1,0 +1,18 @@
+idf_component_register(
+    SRCS
+        "main.cpp"
+        "modules/SerialManager.cpp"
+        "modules/WiFiManager.cpp"
+        "modules/EthernetManager.cpp"
+        "modules/Keyboard.cpp"
+        "modules/DisplayTM1640.cpp"
+        "modules/ADC_AD7191.cpp"
+        "modules/PowerManager.cpp"
+        "modules/CashDrawer.cpp"
+        "modules/StatusLED.cpp"
+        "utils/Logger.cpp"
+    INCLUDE_DIRS
+        "."
+        "modules"
+        "utils"
+)
