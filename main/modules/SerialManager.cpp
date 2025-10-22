@@ -1,6 +1,7 @@
 #include "SerialManager.h"
 #include "esp_log.h"
 #include <cstring>
+#include "config.h"
 
 static const char* TAG = "SerialManager";
 

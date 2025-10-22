@@ -1,5 +1,7 @@
 #pragma once
 #include "driver/gpio.h"
+#include "config.h"
+
 
 class StatusLED {
 public:

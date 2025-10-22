@@ -11,13 +11,44 @@
 #include "utils/Logger.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "config.h"
+
+// پارامترهایی که به تسک ارسال می‌شوند
+struct TaskParams {
+    Keyboard* kb;
+    ADC_AD7191* adc;
+    DisplayTM1640* display;
+    PowerManager* power;
+    StatusLED* led;
+};
+
+// تابع تسک اصلی
+void main_loop_task(void* pvParameters) {
+    TaskParams* params = (TaskParams*)pvParameters;
+
+    Keyboard* kb = params->kb;
+    ADC_AD7191* adc = params->adc;
+    DisplayTM1640* display = params->display;
+    PowerManager* power = params->power;
+    StatusLED* led = params->led;
+
+    while (true) {
+        kb->poll();
+        double weight = adc->read();
+        display->showNumber((int)weight, true);
+        power->monitor();
+        led->blink();
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+}
 
 extern "C" void app_main(void)
 {
-    //first commit
+    // Logger
     Logger::init();
     Logger::info("Scale Controller Starting...");
 
+    // ماژول‌ها
     SerialManager serial;
     serial.init();
 
@@ -45,15 +76,16 @@ extern "C" void app_main(void)
     StatusLED led;
     led.init();
 
-    // simple tasks: create a periodic task for demonstration
-    xTaskCreate([](void*){
-        while(true){
-            kb.poll();
-            double weight = adc.read();
-            display.showNumber((int)weight, true);
-            power.monitor();
-            led.blink();
-            vTaskDelay(pdMS_TO_TICKS(200));
-        }
-    }, "main_loop", 8*1024, NULL, 5, NULL);
+    // آماده کردن پارامترها برای تسک
+    static TaskParams params { &kb, &adc, &display, &power, &led };
+
+    // ایجاد تسک اصلی
+    xTaskCreate(
+        main_loop_task,   // تابع تسک
+        "main_loop",      // نام تسک
+        8*1024,           // اندازه استک
+        &params,          // پارامترها
+        5,                // اولویت
+        NULL              // handle (نیاز نداریم)
+    );
 }

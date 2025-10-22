@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 #include "driver/gpio.h"
+#include "config.h"
+
 
 class DisplayTM1640 {
 public:

@@ -1,3 +1,4 @@
 {
-    "idf.pythonInstallPath": "c:\\esp\\.espressif\\tools\\idf-python\\3.11.2\\python.exe"
+    "idf.pythonInstallPath": "c:\\esp\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
+    "idf.flashType": "UART"
 }
