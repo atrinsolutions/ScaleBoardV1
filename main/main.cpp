@@ -14,6 +14,7 @@
 
 extern "C" void app_main(void)
 {
+    //first commit
     Logger::init();
     Logger::info("Scale Controller Starting...");
 
