@@ -10,7 +10,9 @@ idf_component_register(
         "modules/PowerManager.cpp"
         "modules/CashDrawer.cpp"
         "modules/StatusLED.cpp"
+        "modules/OTAWebServer.cpp"
         "utils/Logger.cpp"
+        
     INCLUDE_DIRS
         "."
         "modules"

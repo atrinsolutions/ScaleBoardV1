@@ -12,6 +12,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "config.h"
+#include "OTAWebServer.h"  // فایل ماژول OTA که ساخته‌ایم
+
 
 // پارامترهایی که به تسک ارسال می‌شوند
 struct TaskParams {
@@ -76,7 +78,18 @@ extern "C" void app_main(void)
     StatusLED led;
     led.init();
 
-    // آماده کردن پارامترها برای تسک
+    // --- شروع OTAWebServer ---
+    OTAWebServer otaServer(
+        OTAMode::DIRECT_AP,   // پیش‌فرض: گوشی مستقیم به ESP وصل شود
+        "MobileSSID",         // SSID اینترنت گوشی
+        "MobilePassword",     // Password اینترنت گوشی
+        "ESP32_AP",           // AP داخلی ESP برای موبایل
+        "12345678",           // پسورد AP
+        "http://jahatpro.ir/posscale/ps.bin" // URL فایل فریمور
+    );
+    otaServer.begin();
+
+    // آماده کردن پارامترها برای تسک اصلی
     static TaskParams params { &kb, &adc, &display, &power, &led };
 
     // ایجاد تسک اصلی
