@@ -41,49 +41,23 @@ struct TaskParams {
 // تابع تسک اصلی
 void main_loop_task(void* pvParameters) {
     TaskParams* params = (TaskParams*)pvParameters;
-    Keyboard* kb = params->kb;
-    ADC_AD7191* adc = params->adc;
-    DisplayTM1640* display = params->display;
-    PowerManager* power = params->power;
-    StatusLED* led = params->led;
+    // Keyboard* kb = params->kb;
+    // ADC_AD7191* adc = params->adc;
+    // DisplayTM1640* display = params->display;
+    // PowerManager* power = params->power;
+    // StatusLED* led = params->led;
     SerialManagerUART* uart = params->uart;
 
     while (true) {
-        kb->poll();
-        
-        // خواندن وزن
-        double weight = adc->read();
-        display->showNumber((int)weight, true);
-        
-        power->monitor();
-        led->blink();
-
         // بررسی داده‌های دریافتی روی پورت سریال سخت‌افزاری (UART)
         if (uart != nullptr) {
             uart->checkUartRx();
         }
-        
         // تاخیر ۲۰۰ میلی‌ثانیه
         vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 
-// --- Callback دریافت داده از USB (CDC) ---
-void tinyusb_cdc_rx_callback(int itf, cdcacm_event_t *event)
-{
-    size_t rx_size = 0;
-    uint8_t temp_buf[CONFIG_TINYUSB_CDC_RX_BUFSIZE + 1]; 
-    
-    // خواندن داده از درایور TinyUSB
-    esp_err_t ret = tinyusb_cdcacm_read((tinyusb_cdcacm_itf_t)itf, temp_buf, CONFIG_TINYUSB_CDC_RX_BUFSIZE, &rx_size);
-    
-    if (ret == ESP_OK && rx_size > 0) {
-        // ارسال داده به کلاس SerialManagerUSB برای پردازش
-        if (usbSerial != nullptr) {
-            usbSerial->processRx(temp_buf, rx_size);
-        }
-    }
-}
 
 extern "C" void app_main(void)
 {
@@ -110,20 +84,8 @@ extern "C" void app_main(void)
 
     // 5. راه‌اندازی USB Serial (TinyUSB)
     Logger::info("Initializing USB CDC...");
-    const tinyusb_config_t tusb_cfg = TINYUSB_DEFAULT_CONFIG();
-    ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
-
-    tinyusb_config_cdcacm_t acm_cfg = {
-        .cdc_port = TINYUSB_CDC_ACM_0,
-        .callback_rx = &tinyusb_cdc_rx_callback,
-        .callback_rx_wanted_char = NULL,
-        .callback_line_state_changed = NULL,
-        .callback_line_coding_changed = NULL
-    };
-    ESP_ERROR_CHECK(tinyusb_cdcacm_init(&acm_cfg));
-    
     usbSerial = new SerialManagerUSB(SerialProtocol::PROTOCOL_PAND);
-    usbSerial->begin();
+    usbSerial->init(); // این متد همه کارها (نصب درایور و راه‌اندازی پورت) را انجام می‌دهد
     usbSerial->setAdcInstance(adc);
     Logger::info("USB CDC Ready.");
 
@@ -131,7 +93,7 @@ extern "C" void app_main(void)
     // پین‌ها را بر اساس سخت‌افزار خود تنظیم کنید (مثلاً TX=4, RX=5)
     Logger::info("Initializing UART Serial...");
     uartSerial = new SerialManagerUART(UART_NUM_1, SerialProtocol::PROTOCOL_PAND);
-    uartSerial->begin(115200, 4, 5); // Baud=115200, TX=4, RX=5
+    uartSerial->init(115200, 4, 5); // Baud=115200, TX=4, RX=5
     uartSerial->setAdcInstance(adc);
     Logger::info("UART Serial Ready.");
 
@@ -156,18 +118,18 @@ extern "C" void app_main(void)
     // PowerManager* power = new PowerManager();
     // StatusLED* led = new StatusLED();
 
-    // // آماده‌سازی پارامترها برای تسک
-    // TaskParams params = {
-    //     .kb = kb,
-    //     .adc = adc,
-    //     .display = display,
-    //     .power = power,
-    //     .led = led,
-    //     .uart = uartSerial // اضافه کردن سریال به پارامترها
-    // };
+    // آماده‌سازی پارامترها برای تسک
+    TaskParams params = {
+        // .kb = kb,
+        // .adc = adc,
+        // .display = display,
+        // .power = power,
+        // .led = led,
+        .uart = uartSerial // اضافه کردن سریال به پارامترها
+    };
 
-    // // 8. ساخت و شروع تسک اصلی
-    // xTaskCreate(main_loop_task, "MainLoop", 4096, &params, 5, NULL);
+    // 8. ساخت و شروع تسک اصلی
+    xTaskCreate(main_loop_task, "MainLoop", 4096, &params, 5, NULL);
 
     Logger::info("System Started Successfully.");
 }

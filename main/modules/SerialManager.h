@@ -4,9 +4,13 @@
 #include <string>
 #include <cstdint>
 #include <vector>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
 #include "driver/uart.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "tusb_cdc_acm.h"
 #include "ADC_AD7191.h" 
 
 // --- تعریف پروتکل‌ها ---
@@ -26,25 +30,18 @@ class SerialManagerBase {
 protected:
     SerialProtocol protocol_;
     static const char* TAG;
-    
-    // اشاره‌گر به ADC
     ADC_AD7191* adc_; 
-    
-    // بافر مشترک برای دریافت داده‌ها
     std::vector<uint8_t> rx_buffer_;
 
 public:
     explicit SerialManagerBase(SerialProtocol protocol);
     virtual ~SerialManagerBase() = default;
+    
     void setProtocol(SerialProtocol protocol);
-    
-    // متد تزریق ADC
     void setAdcInstance(ADC_AD7191* adc);
-    
-    // --- متد اصلی ارسال ---
     void sendWeight();
     
-    // --- متد پردازش داده دریافتی (مشترک) ---
+    // متد عمومی برای پردازش داده (هم توسط USB و هم UART استفاده می‌شود)
     void processRx(const uint8_t* buf, size_t len);
 
 protected:
@@ -60,7 +57,7 @@ protected:
     std::string formatKaraTozin(const WeightData& data);
     std::string formatServina(const WeightData& data);
     
-    // توابع مدیریت دستورات (مشترک)
+    // توابع مدیریت دستورات
     void handleCommand(const std::string& cmd);
     void sendIP();
 };
@@ -70,31 +67,41 @@ class SerialManagerUART : public SerialManagerBase {
 private:
     uart_port_t uart_num_;
     bool is_initialized_;
+    TaskHandle_t uart_task_handle_;
+    QueueHandle_t uart_queue_;
+
 public:
     SerialManagerUART(uart_port_t uart_num, SerialProtocol protocol = SerialProtocol::PROTOCOL_PAND);
     ~SerialManagerUART() override;
-    void begin(int baudRate, int txPin, int rxPin, int dataBits = 8, int stopBits = 1, int parity = 0);
-    bool updateConfig(int baudRate, int dataBits, int stopBits, int parity);
+
+    // متد init برای راه‌اندازی کامل (درایور + تسک)
+    void init(int baudRate, int txPin, int rxPin, int dataBits = 8, int stopBits = 1, int parity = 0);
     
-    // متد برای خواندن از UART و پاس دادن به Base
-    void checkUartRx();
-    
+    // متد کمکی برای خواندن (اگر نیاز به Polling دستی بود)
+    void checkUartRx(); 
+
 protected:
     void sendRaw(const char* data, size_t len) override;
+    
+    // تسک داخلی برای مدیریت رویدادهای UART
+    static void uart_event_task_wrapper(void* pvParameters);
+    void uart_event_task_impl();
 };
 
 // --- کلاس فرزند USB ---
 class SerialManagerUSB : public SerialManagerBase {
 private:
     bool is_initialized_;
-    
+
 public:
     explicit SerialManagerUSB(SerialProtocol protocol = SerialProtocol::PROTOCOL_PAND);
-    void begin();
     
-    // این متد باید از Callback TinyUSB صدا زده شود
-    void processRx(const uint8_t* buf, size_t len); // Override برای فراخوانی مستقیم اگر نیاز شد
+    // متد init برای راه‌اندازی TinyUSB
+    void init();
     
+    // متد استاتیک برای Callback (چون تابع C نیاز دارد)
+    static void tinyusb_cdc_rx_callback_wrapper(int itf, cdcacm_event_t *event);
+
 protected:
     void sendRaw(const char* data, size_t len) override;
 };
