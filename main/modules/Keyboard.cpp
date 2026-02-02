@@ -8,8 +8,8 @@
 static const char* TAG = "Keyboard";
 
 Keyboard::Keyboard(){
-    rows = { GPIO_NUM_21, GPIO_NUM_22, GPIO_NUM_23 };
-    cols = { GPIO_NUM_25, GPIO_NUM_26, GPIO_NUM_27, GPIO_NUM_14 };
+    rows = { GPIO_NUM_21, GPIO_NUM_21, GPIO_NUM_21 };
+    cols = { GPIO_NUM_21, GPIO_NUM_26, GPIO_NUM_27, GPIO_NUM_14 };
 }
 
 void Keyboard::init(){

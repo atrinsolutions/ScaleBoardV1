@@ -1,4 +1,15 @@
 {
-    "idf.pythonInstallPath": "c:\\esp\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
-    "idf.flashType": "UART"
+  "idf.pythonInstallPath": "c:\\esp\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
+  "idf.flashType": "UART",
+  "idf.customExtraVars": {
+    "OPENOCD_SCRIPTS": "c:\\esp\\.espressif\\tools\\openocd-esp32\\v0.11.0-esp32-20221026/openocd-esp32/share/openocd/scripts",
+    "IDF_CCACHE_ENABLE": "1",
+    "ESP_ROM_ELF_DIR": "c:\\esp\\.espressif\\tools\\esp-rom-elfs\\20220823/",
+    "IDF_TARGET": "esp32s3"
+  },
+  "idf.portWin": "COM7",
+  "idf.openOcdConfigs": [
+    "interface/ftdi/esp32_devkitj_v1.cfg",
+    "target/esp32s3.cfg"
+  ]
 }

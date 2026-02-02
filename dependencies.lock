@@ -1,0 +1,44 @@
+dependencies:
+  esp_tinyusb:
+    dependencies: []
+    source:
+      path: D:\ScaleBoardV1\components\esp_tinyusb
+      type: local
+    version: 2.0.1~1
+  espressif/mdns:
+    component_hash: 29e47564b1a7ee778135e17fbbf2a2773f71c97ebabfe626c8eda7c958a7ad16
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.9.1
+  espressif/tinyusb:
+    component_hash: 5ea9d3b6d6b0734a0a0b3491967aa0e1bece2974132294dbda5dd2839b247bfa
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    - esp32h4
+    version: 0.19.0~2
+  idf:
+    source:
+      type: idf
+    version: 5.5.2
+direct_dependencies:
+- espressif/esp_tinyusb
+- espressif/mdns
+- espressif/tinyusb
+- idf
+manifest_hash: bc31833d3fc88eb38e2a08fc0d9d6208980be6ba68d5bbc5c57daf5e6d40caf3
+target: esp32s3
+version: 2.0.0

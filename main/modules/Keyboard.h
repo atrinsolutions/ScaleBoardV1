@@ -1,17 +1,25 @@
 #pragma once
-#include "driver/gpio.h"
-#include <array>
+#include <vector>
 #include <functional>
+#include "driver/gpio.h"
+
+using KeyHandler = std::function<void(uint8_t)>;
 
 class Keyboard {
 public:
-    using KeyHandler = std::function<void(uint8_t)>;
     Keyboard();
+
+    // راه‌اندازی کیبورد
     void init();
+
+    // خواندن وضعیت کلیدها (poll)
     void poll();
+
+    // ثبت callback هنگام فشار کلید
     void setCallback(KeyHandler cb);
+
 private:
-    std::array<gpio_num_t,3> rows;
-    std::array<gpio_num_t,4> cols;
-    KeyHandler callback;
+    std::vector<gpio_num_t> rows;  // پین‌های ردیف
+    std::vector<gpio_num_t> cols;  // پین‌های ستون
+    KeyHandler callback = nullptr;  // تابع فراخوان هنگام فشار کلید
 };

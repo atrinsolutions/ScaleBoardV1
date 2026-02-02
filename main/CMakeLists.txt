@@ -12,9 +12,19 @@ idf_component_register(
         "modules/StatusLED.cpp"
         "modules/OTAWebServer.cpp"
         "utils/Logger.cpp"
-        
     INCLUDE_DIRS
         "."
         "modules"
         "utils"
+    REQUIRES
+        "esp_tinyusb"
+        "esp_http_client"
+        "esp_https_ota"
+        "esp_http_server"
+        "esp_wifi"
+        "nvs_flash"
+        "esp_event"
+        "esp_netif"
+        "driver"
+        "esp_timer"
 )
