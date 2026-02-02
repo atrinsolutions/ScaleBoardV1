@@ -27,12 +27,10 @@ public:
     
     static OTAWebServer* instance_;
 
-        // متدهای جدید برای تغییر تنظیمات از طریق سریال
+    // --- متدهای Setter (قبلاً داشتید یا اضافه شدند) ---
     void setWiFiCredentials(const std::string& ssid, const std::string& pass);
     void setWebCredentials(const std::string& username, const std::string& password);
     
-    // متد برای ذخیره در NVS و ریستارت
-    void saveAndRestart();
     void setAPCredentials(const std::string& ssid, const std::string& pass) {
         ap_ssid_ = ssid;
         ap_pass_ = pass;
@@ -46,12 +44,25 @@ public:
         mode_ = mode;
     }
 
-    // متدهای مربوط به NVS
+    // --- متدهای Getter (جدید - برای خواندن تنظیمات در دستور GET_CONFIG) ---
+    std::string getWiFiSSID() const { return wifi_ssid_; }
+    std::string getWiFiPass() const { return wifi_pass_; }
+    std::string getAPSSID() const { return ap_ssid_; }
+    std::string getAPPass() const { return ap_pass_; }
+    std::string getFwUrl() const { return fw_url_; }
+    std::string getWebUser() const { return username_; }
+    std::string getWebPass() const { return password_; }
+    OTAMode getMode() const { return mode_; }
+
+    // --- متدهای مربوط به NVS ---
     void loadSettings();
     void saveSettings();
+    
+    // متد کمکی برای ذخیره و ریستارت (استفاده شده در SerialManager)
+    void saveAndRestart();
 
 private:
-    // ترتیب متغیرها باید دقیقاً مشابه لیست مقداردهی در Constructor باشد
+    // متغیرهای عضو (Member Variables)
     OTAMode mode_;
     std::string wifi_ssid_;
     std::string wifi_pass_;
@@ -67,14 +78,12 @@ private:
     ADC_AD7191* adc_;
     
     bool wifi_connected_;
-    std::string hostname_; // منتقل شد به اینجا تا بعد از wifi_connected_ باشد
+    std::string hostname_; 
     
     void initWiFi();
     void startMDNS();
     void startWebServer();
 
-
-    
     static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
     static void otaTask(void* param);
     

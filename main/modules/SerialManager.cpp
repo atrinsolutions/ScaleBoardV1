@@ -133,6 +133,41 @@ void SerialManagerBase::handleCommand(const std::string& cmd) {
             sendRaw("ERROR: Server not ready\r\n", 26);
         }
     }
+    else if (cmd == "GET_CONFIG") {
+        if (myServer != nullptr) {
+            ESP_LOGI(TAG, "Command: GET_CONFIG");
+            
+            // دریافت مقادیر از سرور
+            std::string ssid = myServer->getWiFiSSID();
+            std::string wifi_pass = myServer->getWiFiPass();
+            std::string ap_ssid = myServer->getAPSSID();
+            std::string ap_pass = myServer->getAPPass();
+            std::string fw_url = myServer->getFwUrl();
+            std::string web_user = myServer->getWebUser();
+            std::string web_pass = myServer->getWebPass();
+            int mode_val = static_cast<int>(myServer->getMode());
+
+            // ساخت رشته پاسخ
+            // فرمت: CONFIG <SSID> <WiFiPass> <AP_SSID> <AP_Pass> <FW_URL> <WebUser> <WebPass> <Mode>
+            char buffer[512];
+            int len = snprintf(buffer, sizeof(buffer), 
+                "CONFIG %s %s %s %s %s %s %s %d\r\n", 
+                ssid.c_str(), 
+                wifi_pass.c_str(), 
+                ap_ssid.c_str(), 
+                ap_pass.c_str(), 
+                fw_url.c_str(), 
+                web_user.c_str(), 
+                web_pass.c_str(), 
+                mode_val
+            );
+
+            // ارسال به پورت سریال
+            sendRaw(buffer, len);
+        } else {
+            sendRaw("ERROR: Server not ready\r\n", 26);
+        }
+    }
     else if (cmd.rfind("SET_CONFIG ", 0) == 0) {
         // فرمت کامل جدید:
         // SET_CONFIG <SSID> <WiFiPass> <AP_SSID> <AP_Pass> <FW_URL> <WebUser> <WebPass> <Mode>
@@ -142,7 +177,7 @@ void SerialManagerBase::handleCommand(const std::string& cmd) {
         
         std::string ssid, wifi_pass, ap_ssid, ap_pass, fw_url, web_user, web_pass;
         int mode_val = 2; // پیش‌فرض Hybrid
-
+        
         // خواندن 7 رشته و 1 عدد
         if (ss >> ssid >> wifi_pass >> ap_ssid >> ap_pass >> fw_url >> web_user >> web_pass >> mode_val) {
             if (myServer != nullptr) {
@@ -151,18 +186,18 @@ void SerialManagerBase::handleCommand(const std::string& cmd) {
                 // 1. تنظیمات WiFi Station
                 myServer->setWiFiCredentials(ssid, wifi_pass);
                 
-                // 2. تنظیمات WiFi AP (نیاز به متد جدید در OTAWebServer داریم یا دسترسی مستقیم)
+                // 2. تنظیمات WiFi AP
                 myServer->setAPCredentials(ap_ssid, ap_pass); 
                 
-                // 3. تنظیمات URL (نیاز به متد setter)
+                // 3. تنظیمات URL
                 myServer->setFwUrl(fw_url);
-
+                
                 // 4. تنظیمات وب
                 myServer->setWebCredentials(web_user, web_pass);
-
-                // 5. تنظیم مود (نیاز به متد setter)
+                
+                // 5. تنظیم مود
                 myServer->setMode(static_cast<OTAMode>(mode_val));
-
+                
                 ESP_LOGI(TAG, "Config received: Mode=%d", mode_val);
                 
                 sendRaw("OK: All Config Updated in Memory. Send 'SAVE_RESTART' to apply.\r\n", 60);
