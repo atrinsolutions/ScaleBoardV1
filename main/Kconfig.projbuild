@@ -1,0 +1,63 @@
+menu "OTA Configuration"
+
+    config OTA_FIRMWARE_UPGRADE_URL
+        string "firmware upgrade url endpoint"
+        default "https://jahatpro.ir/Downloads/ScaleBoardV1.bin"
+        help
+            URL of server which hosts the firmware
+            image.
+
+    config OTA_USE_CERT_BUNDLE
+        bool "Enable certificate bundle"
+        default y
+        depends on MBEDTLS_CERTIFICATE_BUNDLE
+        help
+            Enable trusted root certificate bundle. This approach allows to have
+            OTA updates functional with any public server without requirement
+            to explicitly add its server certificate.
+
+    config OTA_FIRMWARE_UPGRADE_URL_FROM_STDIN
+        bool
+        default y if OTA_FIRMWARE_UPGRADE_URL = "FROM_STDIN"
+
+    config OTA_SKIP_COMMON_NAME_CHECK
+        bool "Skip server certificate CN fieldcheck"
+        default n
+        help
+            This allows you to skip the validation of OTA server certificate CN field.
+
+    config OTA_FIRMWARE_UPGRADE_BIND_IF
+        bool "Support firmware upgrade bind specified interface"
+        default n
+        help
+            This allows you to bind specified interface in OTA OTA.
+
+    choice OTA_FIRMWARE_UPGRADE_BIND_IF_TYPE
+        prompt "Choose OTA data bind interface"
+        default OTA_FIRMWARE_UPGRADE_BIND_IF_STA
+        depends on OTA_FIRMWARE_UPGRADE_BIND_IF
+        help
+            Select which interface type of OTA data go through.
+
+        config OTA_FIRMWARE_UPGRADE_BIND_IF_STA
+            bool "Bind wifi station interface"
+            depends on OTA_CONNECT_WIFI
+            help
+                Select wifi station interface to pass the OTA data.
+
+        config OTA_FIRMWARE_UPGRADE_BIND_IF_ETH
+            bool "Bind ethernet interface"
+            depends on OTA_CONNECT_ETHERNET
+            help
+                Select ethernet interface to pass the OTA data.
+    endchoice
+
+    config OTA_TLS_DYN_BUF_RX_STATIC
+        bool "Use static rx buffer for dynamic buffer after TLS handshake"
+        depends on MBEDTLS_DYNAMIC_BUFFER
+        default n
+        help
+            This converts the dynamic RX buffer to static allocation after the TLS handshake
+            is complete. This reduces memory fragmentation by avoiding repeated dynamic
+            allocations during data transfer.
+endmenu

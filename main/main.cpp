@@ -13,7 +13,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "config.h"
-#include "OTAWebServer.h"
+#include "WebServer.h"
 #include "nvs_flash.h"
 
 // --- کتابخانه‌های مورد نیاز برای USB و شبکه ---
@@ -23,7 +23,7 @@
 #include "esp_netif.h"
 
 // --- نمونه‌های سراسری ---
-OTAWebServer* myServer = nullptr;
+WebServer* myServer = nullptr;
 ADC_AD7191* adc = nullptr;
 SerialManagerUSB* usbSerial = nullptr; // ماژول USB
 SerialManagerUART* uartSerial = nullptr; // ماژول UART (سریال دوم)
@@ -97,11 +97,11 @@ extern "C" void app_main(void)
     uartSerial->setAdcInstance(adc);
     Logger::info("UART Serial Ready.");
 
-    // 6. راه‌اندازی OTAWebServer
-    myServer = new OTAWebServer(
-        OTAMode::HYBRID,             
-        "Takin",                     
-        "takinarka",                 
+    // 6. راه‌اندازی WebServer
+    myServer = new WebServer(
+        WIFIMode::HYBRID,             
+        "MobinNet7665",                     
+        "31477665",                 
         "ESP32_AP",                  
         "12345678",                  
         "http://jahatpro.ir/posscale/ps.bin", 

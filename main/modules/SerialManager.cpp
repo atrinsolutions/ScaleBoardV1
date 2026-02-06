@@ -9,10 +9,10 @@
 #include "tinyusb.h"
 #include "tinyusb_cdc_acm.h"
 #include "tinyusb_default_config.h"
-#include "OTAWebServer.h" 
+#include "WebServer.h" 
 
 
-extern OTAWebServer* myServer;
+extern WebServer* myServer;
 const char* SerialManagerBase::TAG = "SerialMgr";
 
 // ==========================================
@@ -119,7 +119,7 @@ void SerialManagerBase::handleCommand(const std::string& cmd) {
             sendRaw("ERROR: Server not ready\r\n", 26);
         }
     }
-    else if (cmd == "GET_CONFIG") {
+        else if (cmd == "GET_CONFIG") {
         if (myServer != nullptr) {
             ESP_LOGI(TAG, "Command: GET_CONFIG");
             std::string ssid = myServer->getWiFiSSID();
@@ -130,11 +130,25 @@ void SerialManagerBase::handleCommand(const std::string& cmd) {
             std::string web_user = myServer->getWebUser();
             std::string web_pass = myServer->getWebPass();
             int mode_val = static_cast<int>(myServer->getMode());
-            char buffer[512];
+
+            // --- استخراج آدرس IP ---
+            char ip_str[16]; // فضای کافی برای فرمت xxx.xxx.xxx.xxx
+            esp_netif_ip_info_t ip_info;
+            esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+            
+            if (netif && esp_netif_get_ip_info(netif, &ip_info) == ESP_OK) {
+                snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d", IP2STR(&ip_info.ip));
+            } else {
+                snprintf(ip_str, sizeof(ip_str), "Error");
+            }
+            // -----------------------
+
+            char buffer[600]; // سایز بافر را کمی افزایش دادیم تا جا شود
             int len = snprintf(buffer, sizeof(buffer), 
-                "CONFIG %s %s %s %s %s %s %s %d\r\n", 
+                "CONFIG %s %s %s %s %s %s %s %d %s\r\n", 
                 ssid.c_str(), wifi_pass.c_str(), ap_ssid.c_str(), ap_pass.c_str(), 
-                fw_url.c_str(), web_user.c_str(), web_pass.c_str(), mode_val);
+                fw_url.c_str(), web_user.c_str(), web_pass.c_str(), mode_val, ip_str);
+            
             sendRaw(buffer, len);
         } else {
             sendRaw("ERROR: Server not ready\r\n", 26);
@@ -152,7 +166,7 @@ void SerialManagerBase::handleCommand(const std::string& cmd) {
                 myServer->setAPCredentials(ap_ssid, ap_pass); 
                 myServer->setFwUrl(fw_url);
                 myServer->setWebCredentials(web_user, web_pass);
-                myServer->setMode(static_cast<OTAMode>(mode_val));
+                myServer->setMode(static_cast<WIFIMode>(mode_val));
                 ESP_LOGI(TAG, "Config received: Mode=%d", mode_val);
                 sendRaw("OK: All Config Updated in Memory. Send 'SAVE_RESTART' to apply.\r\n", 60);
             } else {

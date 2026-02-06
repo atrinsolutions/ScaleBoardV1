@@ -5,15 +5,15 @@
 
 class ADC_AD7191;
 
-enum class OTAMode {
+enum class WIFIMode {
     DIRECT_AP = 0,    // فقط اکسس پوینت (بدون اتصال به مودم)
     ROUTER_STA = 1,   // فقط اتصال به مودم (Station)
     HYBRID = 2        // حالت ترکیبی (هم AP و هم STA)
 };
 
-class OTAWebServer {
+class WebServer {
 public:
-    OTAWebServer(OTAMode mode = OTAMode::HYBRID,
+    WebServer(WIFIMode mode = WIFIMode::HYBRID,
                  const std::string& wifi_ssid = "",
                  const std::string& wifi_pass = "",
                  const std::string& ap_ssid = "ESP32_AP",
@@ -25,7 +25,7 @@ public:
     void begin();
     void setAdcInstance(ADC_AD7191* adc);
     
-    static OTAWebServer* instance_;
+    static WebServer* instance_;
 
     // --- متدهای Setter (قبلاً داشتید یا اضافه شدند) ---
     void setWiFiCredentials(const std::string& ssid, const std::string& pass);
@@ -40,7 +40,7 @@ public:
         fw_url_ = url;
     }
     
-    void setMode(OTAMode mode) {
+    void setMode(WIFIMode mode) {
         mode_ = mode;
     }
 
@@ -52,7 +52,7 @@ public:
     std::string getFwUrl() const { return fw_url_; }
     std::string getWebUser() const { return username_; }
     std::string getWebPass() const { return password_; }
-    OTAMode getMode() const { return mode_; }
+    WIFIMode getMode() const { return mode_; }
 
     // --- متدهای مربوط به NVS ---
     void loadSettings();
@@ -63,7 +63,7 @@ public:
 
 private:
     // متغیرهای عضو (Member Variables)
-    OTAMode mode_;
+    WIFIMode mode_;
     std::string wifi_ssid_;
     std::string wifi_pass_;
     std::string ap_ssid_;

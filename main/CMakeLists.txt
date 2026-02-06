@@ -10,8 +10,9 @@ idf_component_register(
         "modules/PowerManager.cpp"
         "modules/CashDrawer.cpp"
         "modules/StatusLED.cpp"
-        "modules/OTAWebServer.cpp"
+        "modules/WebServer.cpp"
         "utils/Logger.cpp"
+        "modules/OtaManager.cpp"
     INCLUDE_DIRS
         "."
         "modules"
@@ -27,4 +28,5 @@ idf_component_register(
         "esp_netif"
         "driver"
         "esp_timer"
+        "mbedtls"
 )

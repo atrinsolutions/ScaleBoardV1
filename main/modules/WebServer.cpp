@@ -1,4 +1,4 @@
-#include "OTAWebServer.h"
+#include "WebServer.h"
 #include "ADC_AD7191.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "mdns.h"
+#include "OtaManager.h"
 #include <algorithm>
 
 static const char *TAG = "OTA_WEB";
@@ -30,9 +31,9 @@ const char* KEY_USERNAME = "username";
 const char* KEY_PASSWORD = "password";
 const char* KEY_MODE = "mode";
 
-OTAWebServer* OTAWebServer::instance_ = nullptr;
+WebServer* WebServer::instance_ = nullptr;
 
-OTAWebServer::OTAWebServer(OTAMode mode,
+WebServer::WebServer(WIFIMode mode,
                            const std::string& wifi_ssid,
                            const std::string& wifi_pass,
                            const std::string& ap_ssid,
@@ -52,7 +53,7 @@ OTAWebServer::OTAWebServer(OTAMode mode,
     loadSettings(); // بارگذاری تنظیمات ذخیره شده (جایگزین مقادیر پیش‌فرض می‌شود اگر وجود داشته باشند)
 }
 
-void OTAWebServer::loadSettings() {
+void WebServer::loadSettings() {
     ESP_LOGI(TAG, "========== [LOAD SETTINGS] STARTED ==========");
     
     nvs_handle_t nvs_handle;
@@ -162,7 +163,7 @@ void OTAWebServer::loadSettings() {
     int8_t mode_val = 0;
     err = nvs_get_i8(nvs_handle, KEY_MODE, &mode_val);
     if (err == ESP_OK) {
-        mode_ = static_cast<OTAMode>(mode_val);
+        mode_ = static_cast<WIFIMode>(mode_val);
         ESP_LOGI(TAG, "[LOAD] Loaded Mode: %d", mode_val);
     } else {
         ESP_LOGW(TAG, "[LOAD] Mode not found in NVS. Keeping default.");
@@ -172,7 +173,7 @@ void OTAWebServer::loadSettings() {
     ESP_LOGI(TAG, "========== [LOAD SETTINGS] FINISHED ==========");
 }
 
-void OTAWebServer::saveSettings() {
+void WebServer::saveSettings() {
     ESP_LOGI(TAG, "========== [SAVE SETTINGS] STARTED ==========");
     
     nvs_handle_t nvs_handle;
@@ -243,19 +244,19 @@ void OTAWebServer::saveSettings() {
 
 
 
-void OTAWebServer::setWiFiCredentials(const std::string& ssid, const std::string& pass) {
+void WebServer::setWiFiCredentials(const std::string& ssid, const std::string& pass) {
     wifi_ssid_ = ssid;
     wifi_pass_ = pass;
     ESP_LOGI(TAG, "WiFi Credentials updated via Serial.");
 }
 
-void OTAWebServer::setWebCredentials(const std::string& username, const std::string& password) {
+void WebServer::setWebCredentials(const std::string& username, const std::string& password) {
     username_ = username;
     password_ = password;
     ESP_LOGI(TAG, "Web Credentials updated via Serial.");
 }
 
-void OTAWebServer::saveAndRestart() {
+void WebServer::saveAndRestart() {
     ESP_LOGI(TAG, "Saving settings and restarting...");
     
     // ذخیره تنظیمات فعلی در NVS
@@ -266,7 +267,7 @@ void OTAWebServer::saveAndRestart() {
     esp_restart();
 }
 
-void OTAWebServer::startMDNS() {
+void WebServer::startMDNS() {
     // راه‌اندازی سرویس mDNS
     esp_err_t ret = mdns_init();
     if (ret != ESP_OK) {
@@ -293,20 +294,20 @@ void OTAWebServer::startMDNS() {
     ESP_LOGI(TAG, "mDNS started: http://%s.local", host.c_str());
 }
 
-void OTAWebServer::setAdcInstance(ADC_AD7191* adc) {
+void WebServer::setAdcInstance(ADC_AD7191* adc) {
     adc_ = adc;
 }
 
-void OTAWebServer::begin() {
+void WebServer::begin() {
     initWiFi();
     startMDNS();
     startWebServer();
 }
 
-void OTAWebServer::wifi_event_handler(void* arg, esp_event_base_t event_base,
+void WebServer::wifi_event_handler(void* arg, esp_event_base_t event_base,
                                       int32_t event_id, void* event_data)
 {
-    OTAWebServer* self = static_cast<OTAWebServer*>(arg);
+    WebServer* self = static_cast<WebServer*>(arg);
     
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         ESP_LOGI(TAG, "WiFi Disconnected.");
@@ -321,7 +322,7 @@ void OTAWebServer::wifi_event_handler(void* arg, esp_event_base_t event_base,
     }
 }
 
-void OTAWebServer::initWiFi() {
+void WebServer::initWiFi() {
     esp_netif_init();
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     
@@ -334,7 +335,7 @@ void OTAWebServer::initWiFi() {
     esp_wifi_init(&cfg);
 
     switch (mode_) {
-        case OTAMode::ROUTER_STA:
+        case WIFIMode::ROUTER_STA:
         {
             // --- حالت فقط اتصال به مودم (STA) ---
             esp_netif_create_default_wifi_sta();
@@ -351,7 +352,7 @@ void OTAWebServer::initWiFi() {
             break;
         }
 
-        case OTAMode::DIRECT_AP:
+        case WIFIMode::DIRECT_AP:
         {
             // --- حالت فقط اکسس پوینت (AP) ---
             esp_netif_create_default_wifi_ap();
@@ -369,7 +370,7 @@ void OTAWebServer::initWiFi() {
             break;
         }
 
-        case OTAMode::HYBRID:
+        case WIFIMode::HYBRID:
         default:
         {
             // --- حالت ترکیبی (AP + STA) ---
@@ -401,11 +402,12 @@ void OTAWebServer::initWiFi() {
     vTaskDelay(2000 / portTICK_PERIOD_MS);
 }
 
-void OTAWebServer::otaTask(void* param) {
-    OTAWebServer* self = static_cast<OTAWebServer*>(param);
+void WebServer::otaTask(void* param) {
+    WebServer* self = static_cast<WebServer*>(param);
     esp_http_client_config_t http_cfg = {};
     http_cfg.url = self->fw_url_.c_str();
     http_cfg.cert_pem = nullptr;
+    http_cfg.skip_cert_common_name_check = true; 
     esp_https_ota_config_t ota_config = {};
     ota_config.http_config = &http_cfg;
     ESP_LOGI(TAG,"شروع فرآیند آپدیت...");
@@ -420,11 +422,11 @@ void OTAWebServer::otaTask(void* param) {
     vTaskDelete(NULL);
 }
 
-bool OTAWebServer::isAuthenticated(httpd_req_t *req) {
+bool WebServer::isAuthenticated(httpd_req_t *req) {
     return instance_->is_logged_in_;
 }
 
-void OTAWebServer::showLoginPage(httpd_req_t *req, bool hasError) {
+void WebServer::showLoginPage(httpd_req_t *req, bool hasError) {
     const char* errorHtml = hasError ? "<div class='error'>نام کاربری یا رمز عبور اشتباه است.</div>" : "";
     static char html[4096];
     int len = snprintf(html, sizeof(html),
@@ -449,7 +451,7 @@ void OTAWebServer::showLoginPage(httpd_req_t *req, bool hasError) {
     httpd_resp_send(req, html, HTTPD_RESP_USE_STRLEN);
 }
 
-void OTAWebServer::startWebServer() {
+void WebServer::startWebServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = 32;
     config.max_resp_headers = 16;
@@ -496,7 +498,7 @@ void OTAWebServer::startWebServer() {
     }
 }
 
-esp_err_t OTAWebServer::rootHandler(httpd_req_t *req) {
+esp_err_t WebServer::rootHandler(httpd_req_t *req) {
     if (!instance_->isAuthenticated(req)) {
         httpd_resp_set_status(req, "302 Found");
         httpd_resp_set_hdr(req, "Location", "/login.html");
@@ -530,7 +532,7 @@ esp_err_t OTAWebServer::rootHandler(httpd_req_t *req) {
         "</div>"
         "<script>"
         "function startUpdate(){"
-        "fetch('/update').then(r=>r.text()).then(()=>alert('آپدیت شروع شد'));"
+        "  location.href = '/update';" // مرورگر را مستقیماً به صفحه آپدیت می‌برد
         "}"
         "</script>"
         "</body></html>";
@@ -539,12 +541,12 @@ esp_err_t OTAWebServer::rootHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::loginPageHandler(httpd_req_t *req) {
+esp_err_t WebServer::loginPageHandler(httpd_req_t *req) {
     instance_->showLoginPage(req, false);
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::loginHandler(httpd_req_t *req) {
+esp_err_t WebServer::loginHandler(httpd_req_t *req) {
     static char buf[512];
     static char user[32];
     static char pass[32];
@@ -570,27 +572,156 @@ esp_err_t OTAWebServer::loginHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::updateHandler(httpd_req_t *req) {
+
+// هندلر درخواست شروع آپدیت
+esp_err_t WebServer::updateHandler(httpd_req_t *req) {
     if (!instance_->isAuthenticated(req)) {
-        httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Unauthorized");
-        return ESP_FAIL;
+        instance_->showLoginPage(req);
+        return ESP_OK;
     }
-    if (!instance_->ota_in_progress_) {
-        instance_->ota_in_progress_ = true;
-        xTaskCreate(&OTAWebServer::otaTask, "ota_task", 8192, instance_, 5, nullptr);
-    }
-    const char resp[] = "Update started";
-    httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+
+    const char* html_resp = R"html(
+<!DOCTYPE html>
+<html dir="rtl" lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>به‌روزرسانی سیستم</title>
+    <style>
+        :root { --primary: #2563eb; --success: #059669; --error: #dc2626; --bg: #f8fafc; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Tahoma, sans-serif; background-color: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .container { background: white; width: 100%; max-width: 450px; padding: 2.5rem; border-radius: 1.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; }
+        .icon { width: 64px; height: 64px; background: #eff6ff; border-radius: 50%; display: flex; justify-content: center; align-items: center; margin: 0 auto 1.5rem; color: var(--primary); }
+        h2 { color: #1e293b; margin-bottom: 1rem; font-size: 1.5rem; }
+        p { color: #64748b; line-height: 1.6; margin-bottom: 2rem; font-size: 0.95rem; }
+        .progress-container { background: #f1f5f9; border-radius: 1rem; height: 28px; width: 100%; overflow: hidden; position: relative; margin-bottom: 1.5rem; border: 1px solid #e2e8f0; }
+        .progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #3b82f6, #2563eb); transition: width 0.4s ease; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.85rem; font-weight: bold; }
+        .status-wrapper { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 24px; }
+        .status-text { font-size: 0.95rem; font-weight: 500; color: #475569; }
+        .loader { width: 18px; height: 18px; border: 2px solid #cbd5e1; border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
+        .hidden { display: none !important; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">
+            <svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+        </div>
+        <h2>به‌روزرسانی نرم‌افزار</h2>
+        <p id="desc">در حال دریافت و نصب نسخه جدید فریمور. لطفا تا پایان عملیات منتظر بمانید.</p>
+        
+        <div class="progress-container">
+            <div id="bar" class="progress-bar">0%</div>
+        </div>
+        
+        <div class="status-wrapper">
+            <div id="loading-spinner" class="loader"></div>
+            <span id="msg" class="status-text">در حال آماده‌سازی...</span>
+        </div>
+    </div>
+
+    <script>
+        const bar = document.getElementById('bar');
+        const msg = document.getElementById('msg');
+        const spinner = document.getElementById('loading-spinner');
+        const desc = document.getElementById('desc');
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch('/status');
+                const data = await res.json();
+                
+                const p = data.progress || 0;
+                bar.style.width = p + '%';
+                bar.innerText = p + '%';
+                
+                // ۱. ابتدا چک کردن اتمام عملیات
+                if (p >= 100) {
+                    msg.innerText = "نصب کامل شد. در حال بازنشانی سیستم...";
+                    msg.style.color = "var(--success)";
+                    spinner.classList.add('hidden'); // حذف دایره در حال چرخش
+                    desc.innerText = "دستگاه در حال ریستارت است. تا لحظاتی دیگر به صفحه اصلی هدایت می‌شوید.";
+                    clearInterval(interval);
+                    setTimeout(() => { window.location.href = '/'; }, 8000);
+                } 
+                // ۲. چک کردن خطا
+                else if (data.error && data.error !== "") {
+                    msg.innerText = "خطا: " + data.error;
+                    msg.style.color = "var(--error)";
+                    spinner.classList.add('hidden');
+                    clearInterval(interval);
+                } 
+                // ۳. در حال آپدیت
+                else if (data.is_updating) {
+                    msg.innerText = "در حال دریافت: " + p + "%";
+                }
+            } catch (e) {
+                // اگر ارتباط قطع شد (به دلیل ریستارت)، اگر درصد ۱۰۰ بود یعنی تمام شده
+                if(parseInt(bar.style.width) >= 99) {
+                   msg.innerText = "ارتباط با دستگاه قطع شد. در حال ریستارت...";
+                   spinner.classList.add('hidden');
+                   clearInterval(interval);
+                   setTimeout(() => { window.location.href = '/'; }, 5000);
+                }
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
+)html";
+
+    httpd_resp_send(req, html_resp, HTTPD_RESP_USE_STRLEN);
+
+    // تاخیر برای اطمینان از ارسال کامل HTML قبل از شروع تسک سنگین
+    vTaskDelay(pdMS_TO_TICKS(500));
+    
+    // شروع عملیات OTA
+    OtaManager::getInstance().startUpdate(instance_->fw_url_);
+
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::statusHandler(httpd_req_t *req) {
-    const char* status = instance_->ota_in_progress_ ? "Updating..." : "Idle";
-    httpd_resp_send(req, status, HTTPD_RESP_USE_STRLEN);
-    return ESP_OK;
+
+// هندلر وضعیت (ارسال JSON به صفحه وب)
+esp_err_t WebServer::statusHandler(httpd_req_t *req) {
+    // ایجاد یک بافر برای ساخت رشته JSON
+    char json_response[128];
+    
+    // گرفتن رفرنس از نمونه OtaManager
+    auto& ota = OtaManager::getInstance();
+    
+    // ساخت بدنه JSON
+    // %s برای مقدار boolean در جاوااسکریپت استفاده می‌شود (true/false)
+    snprintf(json_response, sizeof(json_response), 
+             "{\"progress\": %d, \"is_updating\": %s, \"error\": \"%s\"}", 
+             ota.getProgress(), 
+             ota.isUpdating() ? "true" : "false",
+             ota.getLastError().empty() ? "" : ota.getLastError().c_str());
+
+    // --- تنظیم هدرها برای جلوگیری از کش شدن توسط مرورگر ---
+    
+    // تعیین نوع محتوا به عنوان JSON
+    httpd_resp_set_type(req, "application/json");
+    
+    // جلوگیری از ذخیره در حافظه کش مرورگر و پروکسی‌ها
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache, no-store, must-revalidate");
+    httpd_resp_set_hdr(req, "Pragma", "no-cache");
+    httpd_resp_set_hdr(req, "Expires", "0");
+
+    // ارسال پاسخ نهایی
+    esp_err_t res = httpd_resp_send(req, json_response, HTTPD_RESP_USE_STRLEN);
+    
+    if (res != ESP_OK) {
+        ESP_LOGE("WEB_SERVER", "خطا در ارسال پاسخ وضعیت OTA");
+    }
+    
+    return res;
 }
 
-esp_err_t OTAWebServer::logoutHandler(httpd_req_t *req) {
+
+esp_err_t WebServer::logoutHandler(httpd_req_t *req) {
     instance_->is_logged_in_ = false;
     httpd_resp_set_status(req, "302 Found");
     httpd_resp_set_hdr(req, "Location", "/login.html");
@@ -598,7 +729,7 @@ esp_err_t OTAWebServer::logoutHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::managePortPageHandler(httpd_req_t *req) {
+esp_err_t WebServer::managePortPageHandler(httpd_req_t *req) {
     if (!instance_->isAuthenticated(req)) {
         httpd_resp_set_status(req, "302 Found");
         httpd_resp_set_hdr(req, "Location", "/login.html");
@@ -717,7 +848,7 @@ esp_err_t OTAWebServer::managePortPageHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::calibPageHandler(httpd_req_t *req) {
+esp_err_t WebServer::calibPageHandler(httpd_req_t *req) {
     if (!instance_->isAuthenticated(req)) {
         httpd_resp_set_status(req, "302 Found");
         httpd_resp_set_hdr(req, "Location", "/login.html");
@@ -951,7 +1082,7 @@ esp_err_t OTAWebServer::calibPageHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::calibLoadHandler(httpd_req_t *req) {
+esp_err_t WebServer::calibLoadHandler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     static char json_buf[2048];
     int len = 0;
@@ -987,7 +1118,7 @@ esp_err_t OTAWebServer::calibLoadHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::calibSaveHandler(httpd_req_t *req) {
+esp_err_t WebServer::calibSaveHandler(httpd_req_t *req) {
     ESP_LOGI(TAG, "[CalibSave] Handler called");
     double maxCap = 30.0;
     double breakPoint = 15.0;
@@ -1041,7 +1172,7 @@ esp_err_t OTAWebServer::calibSaveHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::calibZeroHandler(httpd_req_t *req) {
+esp_err_t WebServer::calibZeroHandler(httpd_req_t *req) {
     ESP_LOGI(TAG, "[CalibZero] Handler called");
     double maxCap = 30.0;
     double breakPoint = 15.0;
@@ -1077,7 +1208,7 @@ esp_err_t OTAWebServer::calibZeroHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::calibSpanHandler(httpd_req_t *req) {
+esp_err_t WebServer::calibSpanHandler(httpd_req_t *req) {
     ESP_LOGI(TAG, "[CalibSpan] Handler called");
     double knownWeight = 0;
     double maxCap = 30.0;
@@ -1116,7 +1247,7 @@ esp_err_t OTAWebServer::calibSpanHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::calibReadHandler(httpd_req_t *req) {
+esp_err_t WebServer::calibReadHandler(httpd_req_t *req) {
     double weight = 0;
     if (instance_->adc_) {
         weight = instance_->adc_->read();
@@ -1130,7 +1261,7 @@ esp_err_t OTAWebServer::calibReadHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::calibFineTuneHandler(httpd_req_t *req) {
+esp_err_t WebServer::calibFineTuneHandler(httpd_req_t *req) {
     if (!instance_->isAuthenticated(req)) {
         httpd_resp_set_status(req, "302 Found");
         httpd_resp_set_hdr(req, "Location", "/login.html");
@@ -1159,7 +1290,7 @@ esp_err_t OTAWebServer::calibFineTuneHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::calibAnalyzeHandler(httpd_req_t *req) {
+esp_err_t WebServer::calibAnalyzeHandler(httpd_req_t *req) {
     if (!instance_->isAuthenticated(req)) return ESP_FAIL;
     if (instance_->adc_) {
         instance_->adc_->startResolutionAnalysis();
@@ -1169,7 +1300,7 @@ esp_err_t OTAWebServer::calibAnalyzeHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-esp_err_t OTAWebServer::calibAnalyzeResultHandler(httpd_req_t *req) {
+esp_err_t WebServer::calibAnalyzeResultHandler(httpd_req_t *req) {
     if (!instance_->isAuthenticated(req)) return ESP_FAIL;
     double res = 0.0;
     bool finished = false;
