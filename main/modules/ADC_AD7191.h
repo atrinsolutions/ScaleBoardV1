@@ -64,7 +64,10 @@ public:
 class ADC_AD7191 {
 public:
     // سازنده پیش‌فرض
-    ADC_AD7191() : _pinSck(GPIO_NUM_41), _pinDataInt(GPIO_NUM_1), _pinPwdn(GPIO_NUM_42), _pinA0(GPIO_NUM_2) {} 
+    ADC_AD7191() : _pinSck(GPIO_NUM_41), _pinDataInt(GPIO_NUM_1), _pinPwdn(GPIO_NUM_42), _pinA0(GPIO_NUM_2) 
+    {
+        adcTaskHandle_ = nullptr;
+    }
    
     // سازنده کلاس
     ADC_AD7191(gpio_num_t pinSck, gpio_num_t pinDataInt, gpio_num_t pinPwdn, gpio_num_t pinA0);
@@ -103,6 +106,7 @@ public:
     void setFirType(FirType type);                
     uint8_t getFirOrder() const;
     FirType getFirType() const;
+    void initFirCoeffs();       
     
     // --- تنظیمات پارامترهای وضعیت ---
     void setStabilityParams(double threshold, uint8_t countLimit);
@@ -205,7 +209,6 @@ private:
     // --- توابع کمکی داخلی ---
     void delayUs(uint32_t us);                 
     double applyFirFilter(double input);       
-    void initFirCoeffs();                      
     void applyZeroTrackingLogic(double currentWeight); 
     
     // --- توابع محاسبه وضعیت ---

@@ -1132,11 +1132,14 @@ esp_err_t WebServer::calibSaveHandler(httpd_req_t *req) {
     int ztEn = 1;
     double ztRange = 0.05;
     int ztTime = 3;
+    
     char buf[1024];
     int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    
     if (ret > 0) {
         buf[ret] = 0;
         char val_str[32];
+        
         if (httpd_query_key_value(buf, "maxCapacity", val_str, sizeof(val_str)) == ESP_OK) maxCap = atof(val_str);
         if (httpd_query_key_value(buf, "breakPoint", val_str, sizeof(val_str)) == ESP_OK) breakPoint = atof(val_str);
         if (httpd_query_key_value(buf, "resLow", val_str, sizeof(val_str)) == ESP_OK) resLow = atof(val_str);
@@ -1149,16 +1152,27 @@ esp_err_t WebServer::calibSaveHandler(httpd_req_t *req) {
         if (httpd_query_key_value(buf, "ztEn", val_str, sizeof(val_str)) == ESP_OK) ztEn = atoi(val_str);
         if (httpd_query_key_value(buf, "ztRange", val_str, sizeof(val_str)) == ESP_OK) ztRange = atof(val_str);
         if (httpd_query_key_value(buf, "ztTime", val_str, sizeof(val_str)) == ESP_OK) ztTime = atoi(val_str);
-        ESP_LOGI(TAG, "[CalibSave] Saving: ZTEn=%d, ZTTime=%d", ztEn, ztTime);
+
+        ESP_LOGI(TAG, "[CalibSave] Saving: ZTEn=%d, ZTTime=%d, FirOrder=%d, FirType=%d", ztEn, ztTime, firOrder, firTypeVal);
+
         if (instance_->adc_) {
             ADC_AD7191::FirType type = static_cast<ADC_AD7191::FirType>(firTypeVal);
+            
             instance_->adc_->setRangeSettings(maxCap, breakPoint, resLow, resHigh);
             instance_->adc_->setStabilityParams(stabTh, stabCnt);
             instance_->adc_->setUnderWeightParams(uwTh);
+            
+            // --- تنظیمات فیلتر (بخش اضافه شده) ---
+            instance_->adc_->setFirOrder(firOrder);
+            instance_->adc_->setFirType(type);
+            // ---------------------------------------
+
             instance_->adc_->setZeroTracking(ztEn == 1);
             instance_->adc_->setZeroTrackingRange(ztRange);
             instance_->adc_->setZeroTrackingTime(ztTime);
+            
             instance_->adc_->saveCalibration();
+            
             const char resp[] = "Settings Saved";
             httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
         } else {

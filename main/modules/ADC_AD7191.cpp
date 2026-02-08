@@ -66,6 +66,7 @@ ADC_AD7191::ADC_AD7191(gpio_num_t pinSck, gpio_num_t pinDataInt, gpio_num_t pinP
       
       // 10. هندلر تسک
       adcTaskHandle_(nullptr) {
+
 }
 
 // --- متد جدید: دریافت داده‌ها به صورت کلاس ---
@@ -148,14 +149,17 @@ void ADC_AD7191::applyZeroTrackingLogic(double currentWeight) {
         zeroTrackingTimer_ = 0;
         return;
     }
-    if (std::abs(currentWeight) <= zeroTrackingRange_) {
+      //ESP_LOGI(TAG, "Zero Tracking enable .......................%f ----- %f  ",std::abs(currentWeight), zeroTrackingRange_*1000);
+   
+    if (std::abs(currentWeight) <= (zeroTrackingRange_*1000)) {
         zeroTrackingTimer_++;
-        if (zeroTrackingTimer_ >= (zeroTrackingTimeLimit_ * 100)) { 
-            ESP_LOGI(TAG, "Zero Tracking: Adjusting Offset. Old: %ld", zeroOffset_);
-            int32_t offsetAdjustment = (int32_t)(currentWeight / scale_);
-            zeroOffset_ += offsetAdjustment;
-            ESP_LOGI(TAG, "Zero Tracking: New Offset: %ld (Adj: %ld)", zeroOffset_, offsetAdjustment);
-            saveCalibration();
+       if (zeroTrackingTimer_ >= (zeroTrackingTimeLimit_)) { 
+
+           // ESP_LOGI(TAG, "Zero Tracking: Adjusting Offset. Old: %ld", zeroOffset_);
+    //        int32_t offsetAdjustment = (int32_t)(currentWeight / scale_);
+    //        zeroOffset_ += offsetAdjustment;
+                    zeroOffset_=latestRawData_; 
+       //     ESP_LOGI(TAG, "Zero Tracking: New Offset: %ld (Adj: %ld)", zeroOffset_, offsetAdjustment);
             zeroTrackingTimer_ = 0;
         }
     } else {
@@ -185,12 +189,12 @@ void ADC_AD7191::init() {
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     gpio_config(&io_conf);
-
+    
     io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pin_bit_mask = (1ULL << _pinDataInt);
     io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
     gpio_config(&io_conf);
-
+    
     gpio_set_level(_pinPwdn, 1);
     vTaskDelay(10 / portTICK_PERIOD_MS);
     gpio_set_level(_pinPwdn, 0);
@@ -209,9 +213,28 @@ void ADC_AD7191::init() {
          ESP_LOGW(TAG, "تنظیماتی در حافظه یافت نشد. استفاده از مقادیر پیش‌فرض.");
          initFirCoeffs(); // ضرایب پیش‌فرض را بارگذاری کن
      }
-     
-     latestFilteredData_ = 0;
-     startContinuousReading();
+
+    // --- نمایش ضرایب فیلتر FIR ---
+    ESP_LOGI(TAG, "FIR Coefficients (Order: %d):", firOrder_);
+    char coeffStr[256]; // بافر بزرگتر برای اطمینان
+    int len = 0;
+    len += snprintf(coeffStr + len, sizeof(coeffStr) - len, "[");
+    for (int i = 0; i < firOrder_; i++) {
+        // نمایش ۶ رقم اعشار برای دقت بیشتر ضرایب
+        len += snprintf(coeffStr + len, sizeof(coeffStr) - len, "%.6f", firCoeffs_[i]);
+        if (i < firOrder_ - 1) {
+            len += snprintf(coeffStr + len, sizeof(coeffStr) - len, ", ");
+        }
+    }
+    len += snprintf(coeffStr + len, sizeof(coeffStr) - len, "]");
+    ESP_LOGI(TAG, "%s", coeffStr);
+    // ---------------------------------
+
+    ESP_LOGI(TAG, " resolutions =>>>>>>>>>>>>>>  low =  %f   >>>>>>>>>>>>>>>>   high = %f", resolutionLow_,resolutionHigh_);
+ 
+
+    latestFilteredData_ = 0;
+    startContinuousReading();
 }
 
 void ADC_AD7191::setChannel(uint8_t channel) {
@@ -225,11 +248,20 @@ void ADC_AD7191::delayUs(uint32_t us) {
 
 int32_t ADC_AD7191::readRaw() {
     int32_t value = 0;
-    int timeout = 100;
+    int timeout = 1000; // افزایش تایم‌اوت به ۱۰۰۰ میلی‌ثانیه (۱ ثانیه) برای اطمینان
+
+    // صبر کردن تا پایه Data صفر شود (سیگنال RDY)
     while (gpio_get_level(_pinDataInt) != 0 && timeout > 0) {
         delayUs(1000);
         timeout--;
     }
+
+    // // اگر تایم‌اوت تمام شد و پایه هنوز ۱ بود، مقدار نامعتبر برگردان
+    // if (timeout == 0) {
+    //     return 0; // یا یک کد خطای خاص
+    // }
+
+    // خواندن ۲۴ بیت داده
     for (int i = 0; i < 24; i++) {
         gpio_set_level(_pinSck, 0);
         delayUs(1);
@@ -238,12 +270,15 @@ int32_t ADC_AD7191::readRaw() {
         gpio_set_level(_pinSck, 1);
         delayUs(1);
     }
+
+    // ارسال ۳ پالس اضافی کلاک برای خاتمه دادن به ارتباط
     for (int i = 0; i < 3; i++) {
         gpio_set_level(_pinSck, 0);
         delayUs(1);
         gpio_set_level(_pinSck, 1);
         delayUs(1);
     }
+
     value -= 0x800000;
     return value;
 }
@@ -304,7 +339,11 @@ void ADC_AD7191::initFirCoeffs() {
     }
 
     for (int i = 0; i < firOrder_; i++) firBuffer_[i] = 0.0;
+    
     int center = firOrder_ / 2;
+    // ضریب همگرایی (Decimation Factor) برای کنترل پهنای باند فیلتر
+    // مقدار 2 تا 4 معمولا برای نمایش ضرایب مناسب است
+    double alpha = 2.0; 
 
     switch (firType_) {
         case FirType::MOVING_AVG:
@@ -316,7 +355,8 @@ void ADC_AD7191::initFirCoeffs() {
             break;
         case FirType::SINC3:
             for (int i = 0; i < firOrder_; i++) {
-                double x = M_PI * (i - center);
+                // اضافه کردن ضریب alpha برای کنترل شکل موج
+                double x = M_PI * alpha * (i - center) / firOrder_; 
                 if (std::abs(x) < 1e-9) {
                     firCoeffs_[i] = 1.0;
                 } else {
@@ -328,7 +368,7 @@ void ADC_AD7191::initFirCoeffs() {
             break;
         case FirType::SINC4:
             for (int i = 0; i < firOrder_; i++) {
-                double x = M_PI * (i - center);
+                double x = M_PI * alpha * (i - center) / firOrder_;
                 if (std::abs(x) < 1e-9) {
                     firCoeffs_[i] = 1.0;
                 } else {
@@ -349,11 +389,21 @@ void ADC_AD7191::initFirCoeffs() {
     // نرمال‌سازی ضرایب
     double sum = 0.0;
     for (int i = 0; i < firOrder_; i++) sum += firCoeffs_[i];
-    if (sum > 1e-9) {
+    if (std::abs(sum) > 1e-9) {
         for (int i = 0; i < firOrder_; i++) firCoeffs_[i] /= sum;
     } else {
         ESP_LOGW(TAG, "Sum of coeffs is zero, skipping normalization");
     }
+
+    // لاگ گرفتن ضرایب با فرمت علمی برای دیدن مقادیر کوچک
+    ESP_LOGI(TAG, "FIR Coefficients (Scientific Notation):");
+    char log_buffer[128];
+    for (int i = 0; i < firOrder_; i++) {
+        // استفاده از %e برای نمایش اعداد بسیار کوچک
+        snprintf(log_buffer, sizeof(log_buffer), "coeff[%d] = %e", i, firCoeffs_[i]);
+        ESP_LOGI(TAG, "%s", log_buffer);
+    }
+
     firIndex_ = 0;
 }
 
@@ -500,36 +550,77 @@ bool ADC_AD7191::loadCalibration() {
         double s;
         size_t req_size;
         
-        if (nvs_get_i32(nvsHandle, "zero", &z) == ESP_OK) zeroOffset_ = z;
+        if (nvs_get_i32(nvsHandle, "zero", &z) == ESP_OK) {
+            zeroOffset_ = z;
+            ESP_LOGI(TAG, "Loaded zeroOffset_: %ld", zeroOffset_);
+        }
         
         req_size = sizeof(s);
-        if (nvs_get_blob(nvsHandle, "scale", &s, &req_size) == ESP_OK) scale_ = s;
-        
+        if (nvs_get_blob(nvsHandle, "scale", &s, &req_size) == ESP_OK) {
+            scale_ = s;
+            ESP_LOGI(TAG, "Loaded scale_: %f", scale_);
+        }
+
         req_size = sizeof(maxCapacity_);
-        if (nvs_get_blob(nvsHandle, "maxcap", &maxCapacity_, &req_size) == ESP_OK);
+        if (nvs_get_blob(nvsHandle, "maxcap", &maxCapacity_, &req_size) == ESP_OK) {
+            ESP_LOGI(TAG, "Loaded maxCapacity_: %f", maxCapacity_);
+        }
+        
         req_size = sizeof(breakPoint_);
-        if (nvs_get_blob(nvsHandle, "breakpt", &breakPoint_, &req_size) == ESP_OK);
+        if (nvs_get_blob(nvsHandle, "breakpt", &breakPoint_, &req_size) == ESP_OK) {
+            ESP_LOGI(TAG, "Loaded breakPoint_: %f", breakPoint_);
+        }
+        
         req_size = sizeof(resolutionLow_);
-        if (nvs_get_blob(nvsHandle, "reslow", &resolutionLow_, &req_size) == ESP_OK);
+        if (nvs_get_blob(nvsHandle, "reslow", &resolutionLow_, &req_size) == ESP_OK) {
+            ESP_LOGI(TAG, "Loaded resolutionLow_: %f", resolutionLow_);
+        }
+        
         req_size = sizeof(resolutionHigh_);
-        if (nvs_get_blob(nvsHandle, "reshigh", &resolutionHigh_, &req_size) == ESP_OK);
+        if (nvs_get_blob(nvsHandle, "reshigh", &resolutionHigh_, &req_size) == ESP_OK) {
+            ESP_LOGI(TAG, "Loaded resolutionHigh_: %f", resolutionHigh_);
+        }
         
         uint8_t order;
-        if (nvs_get_u8(nvsHandle, "firorder", &order) == ESP_OK) firOrder_ = order;
+        if (nvs_get_u8(nvsHandle, "firorder", &order) == ESP_OK) {
+            firOrder_ = order;
+            ESP_LOGI(TAG, "Loaded firOrder_: %d", firOrder_);
+        }
+        
         uint8_t typeVal;
-        if (nvs_get_u8(nvsHandle, "firtype", &typeVal) == ESP_OK) firType_ = (FirType)typeVal;
+        if (nvs_get_u8(nvsHandle, "firtype", &typeVal) == ESP_OK) {
+            firType_ = (FirType)typeVal;
+            ESP_LOGI(TAG, "Loaded firType_: %d", (int)firType_);
+        }
         
         req_size = sizeof(stabilityThreshold_);
-        if (nvs_get_blob(nvsHandle, "stab_th", &stabilityThreshold_, &req_size) == ESP_OK);
-        if (nvs_get_u8(nvsHandle, "stab_cnt", &stableCountLimit_) == ESP_OK);
+        if (nvs_get_blob(nvsHandle, "stab_th", &stabilityThreshold_, &req_size) == ESP_OK) {
+            ESP_LOGI(TAG, "Loaded stabilityThreshold_: %f", stabilityThreshold_);
+        }
+        
+        if (nvs_get_u8(nvsHandle, "stab_cnt", &stableCountLimit_) == ESP_OK) {
+            ESP_LOGI(TAG, "Loaded stableCountLimit_: %d", stableCountLimit_);
+        }
+        
         req_size = sizeof(underWeightThreshold_);
-        if (nvs_get_blob(nvsHandle, "uw_th", &underWeightThreshold_, &req_size) == ESP_OK);
+        if (nvs_get_blob(nvsHandle, "uw_th", &underWeightThreshold_, &req_size) == ESP_OK) {
+            ESP_LOGI(TAG, "Loaded underWeightThreshold_: %f", underWeightThreshold_);
+        }
         
         uint8_t ztEn;
-        if (nvs_get_u8(nvsHandle, "zt_en", &ztEn) == ESP_OK) zeroTrackingEnabled_ = (bool)ztEn;
+        if (nvs_get_u8(nvsHandle, "zt_en", &ztEn) == ESP_OK) {
+            zeroTrackingEnabled_ = (bool)ztEn;
+            ESP_LOGI(TAG, "Loaded zeroTrackingEnabled_: %s", zeroTrackingEnabled_ ? "true" : "false");
+        }
+        
         req_size = sizeof(zeroTrackingRange_);
-        if (nvs_get_blob(nvsHandle, "zt_range", &zeroTrackingRange_, &req_size) == ESP_OK);
-        if (nvs_get_u16(nvsHandle, "zt_time", &zeroTrackingTimeLimit_) == ESP_OK);
+        if (nvs_get_blob(nvsHandle, "zt_range", &zeroTrackingRange_, &req_size) == ESP_OK) {
+            ESP_LOGI(TAG, "Loaded zeroTrackingRange_: %f", zeroTrackingRange_);
+        }
+        
+        if (nvs_get_u16(nvsHandle, "zt_time", &zeroTrackingTimeLimit_) == ESP_OK) {
+            ESP_LOGI(TAG, "Loaded zeroTrackingTimeLimit_: %d", zeroTrackingTimeLimit_);
+        }
         
         nvs_close(nvsHandle);
         ESP_LOGI(TAG, "Settings loaded from NVS.");
@@ -538,6 +629,7 @@ bool ADC_AD7191::loadCalibration() {
     ESP_LOGW(TAG, "NVS not found or empty.");
     return false;
 }
+
 
 void ADC_AD7191::startContinuousReading() {
     if (adcTaskHandle_ == nullptr) {
@@ -558,24 +650,31 @@ double ADC_AD7191::manageResolution(double weight) {
     double resolution;
     if (weight < 0) {
         resolution = resolutionLow_;
-    } else if (weight <= breakPoint_) {
+    } else if (weight <= breakPoint_*1000) {
         resolution = resolutionLow_;
     } else {
         resolution = resolutionHigh_;
     }
-    return std::round(weight / resolution) * resolution;
+    resolution*=1000;
+    return ((int)(weight / resolution) * resolution);
 }
 
+// --- تسک اصلی ADC ---
 // --- تسک اصلی ADC ---
 void ADC_AD7191::adcTask(void* pvParameters) {
     ADC_AD7191* adc = static_cast<ADC_AD7191*>(pvParameters);
     double prevWeight = 0.0;
     uint8_t stableCounter = 0;
     
+    // هدر جدول برای یک بار چاپ در ابتدا (اختیاری)
+    ESP_LOGI(TAG, "--------------------------------------------------------------------------------------------------------");
+    ESP_LOGI(TAG, "Raw       | Off      | Scale    | ExactW   | FiltW    | FinalW   | RoundW   | Stb| Cnt| Z | T | O | U |");
+    ESP_LOGI(TAG, "--------------------------------------------------------------------------------------------------------");
+
     while (1) {
         // ۱. خواندن داده خام
         adc->latestRawData_ = adc->readRaw();
-
+        
         // ۲. منطق آنالیز پایداری (اگر فعال باشد)
         if (adc->isAnalyzingStability_) {
             uint32_t currentTime = xTaskGetTickCount() * portTICK_PERIOD_MS;
@@ -583,25 +682,23 @@ void ADC_AD7191::adcTask(void* pvParameters) {
             if (adc->latestRawData_ < adc->noiseMin_) adc->noiseMin_ = adc->latestRawData_;
             if (adc->latestRawData_ > adc->noiseMax_) adc->noiseMax_ = adc->latestRawData_;
             
-            if ((currentTime - adc->analysisStartTime_) >= 5000) {
+            if ((currentTime - adc->analysisStartTime_) >= 25000) {
                 adc->isAnalyzingStability_ = false;
                 double res = adc->getCalculatedResolution();
                 ESP_LOGI(TAG, "Auto-Analysis Finished. Calculated Resolution: %.9f kg", res);
             }
         }
-
+        
         // ۳. محاسبه وزن دقیق (خام - آفست) * اسکیل
         double exactWeight = (adc->latestRawData_ - adc->zeroOffset_) * adc->scale_;
         
+        // ۵. اعمال منطق Zero Tracking بر روی وزن فیلتر شده
+        adc->applyZeroTrackingLogic(exactWeight);
+
         // ۴. اعمال فیلتر بر روی وزن دقیق
         double filteredWeight = adc->applyFirFilter(exactWeight);
         
-        // ۵. اعمال منطق Zero Tracking بر روی وزن فیلتر شده
-        adc->applyZeroTrackingLogic(filteredWeight);
-        
-        // ۶. محاسبه نهایی وزن با استفاده از آفست احتمالاً تغییر کرده (توسط Zero Tracking)
-        // نکته: برای یکپارچگی، دوباره وزن را محاسبه می‌کنیم اما این بار از فیلتر شده استفاده نمی‌کنیم چون فیلتر تاخیر دارد
-        // اما برای نمایش نهایی، استفاده از فیلتر بهتر است. پس:
+        // ۶. محاسبه نهایی وزن
         double finalWeight = filteredWeight; 
         
         // ۷. گرد کردن و مدیریت رزولوشن
@@ -617,8 +714,25 @@ void ADC_AD7191::adcTask(void* pvParameters) {
         adc->latestFilteredData_ = roundedWeight;
         prevWeight = roundedWeight;
         
-        // لاگ گرفتن فقط برای دیباگ (در حالت عادی کامنت کنید)
-        // ESP_LOGI(TAG, "Raw: %ld, W: %.3f", adc->latestRawData_, roundedWeight);
+        // --- لاگ گرفتن جامع در یک خط با عرض ثابت ---
+        // فرمت: %-10d یعنی عدد در ۱۰ کاراکتر سمت چپ چیده شود (یا راست با عدد)
+        // برای اعداد اعشاری از %-9.3f استفاده شده است
+        
+        ESP_LOGI(TAG, "%-10ld| %-9ld| %-8.6f| %-9.4f| %-9.4f| %-9.4f| %-9.3f| %-3d| %-3d| %-1d| %-1d| %-1d| %-1d|",
+            adc->latestRawData_,      // Raw
+            adc->zeroOffset_,         // Off
+            adc->scale_,              // Scale
+            exactWeight,              // ExactW
+            filteredWeight,           // FiltW
+            finalWeight,              // FinalW
+            roundedWeight,            // RoundW
+            adc->flagIsStable_,       // Stb (Stable)
+            stableCounter,            // Cnt
+            adc->flagIsZero_,         // Z (Zero)
+            adc->flagIsTare_,         // T (Tare)
+            adc->flagIsOverload_,     // O (Overload)
+            adc->flagIsUnderWeight_   // U (Under)
+        );
         
         vTaskDelay(pdMS_TO_TICKS(10)); 
     }
