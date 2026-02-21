@@ -5,3 +5,5 @@ dependencies:
   idf: "^5.0"
   mdns: # کتابخانه mDNS اضافه شد
     version: "*" 
+  ethernet_init:
+    path: ${IDF_PATH}/examples/ethernet/basic/components/ethernet_init

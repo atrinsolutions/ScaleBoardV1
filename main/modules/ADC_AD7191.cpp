@@ -718,21 +718,21 @@ void ADC_AD7191::adcTask(void* pvParameters) {
         // فرمت: %-10d یعنی عدد در ۱۰ کاراکتر سمت چپ چیده شود (یا راست با عدد)
         // برای اعداد اعشاری از %-9.3f استفاده شده است
         
-        ESP_LOGI(TAG, "%-10ld| %-9ld| %-8.6f| %-9.4f| %-9.4f| %-9.4f| %-9.3f| %-3d| %-3d| %-1d| %-1d| %-1d| %-1d|",
-            adc->latestRawData_,      // Raw
-            adc->zeroOffset_,         // Off
-            adc->scale_,              // Scale
-            exactWeight,              // ExactW
-            filteredWeight,           // FiltW
-            finalWeight,              // FinalW
-            roundedWeight,            // RoundW
-            adc->flagIsStable_,       // Stb (Stable)
-            stableCounter,            // Cnt
-            adc->flagIsZero_,         // Z (Zero)
-            adc->flagIsTare_,         // T (Tare)
-            adc->flagIsOverload_,     // O (Overload)
-            adc->flagIsUnderWeight_   // U (Under)
-        );
+        // ESP_LOGI(TAG, "%-10ld| %-9ld| %-8.6f| %-9.4f| %-9.4f| %-9.4f| %-9.3f| %-3d| %-3d| %-1d| %-1d| %-1d| %-1d|",
+        //     adc->latestRawData_,      // Raw
+        //     adc->zeroOffset_,         // Off
+        //     adc->scale_,              // Scale
+        //     exactWeight,              // ExactW
+        //     filteredWeight,           // FiltW
+        //     finalWeight,              // FinalW
+        //     roundedWeight,            // RoundW
+        //     adc->flagIsStable_,       // Stb (Stable)
+        //     stableCounter,            // Cnt
+        //     adc->flagIsZero_,         // Z (Zero)
+        //     adc->flagIsTare_,         // T (Tare)
+        //     adc->flagIsOverload_,     // O (Overload)
+        //     adc->flagIsUnderWeight_   // U (Under)
+        // );
         
         vTaskDelay(pdMS_TO_TICKS(10)); 
     }

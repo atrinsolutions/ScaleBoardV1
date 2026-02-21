@@ -25,39 +25,56 @@
 // --- نمونه‌های سراسری ---
 WebServer* myServer = nullptr;
 ADC_AD7191* adc = nullptr;
-SerialManagerUSB* usbSerial = nullptr; // ماژول USB
-SerialManagerUART* uartSerial = nullptr; // ماژول UART (سریال دوم)
+SerialManagerUSB* usbSerial = nullptr;
+SerialManagerUART* uartSerial = nullptr;
+EthernetManager* ethManager = nullptr; 
+Keyboard* kb = nullptr; 
 
-// پارامترهایی که به تسک ارسال می‌شوند
+// صف برای دریافت رویدادهای کیبورد
+QueueHandle_t keyboard_queue = nullptr;
+
+// پارامترهایی که به تسک اصلی ارسال می‌شوند
 struct TaskParams {
     Keyboard* kb;
     ADC_AD7191* adc;
     DisplayTM1640* display;
     PowerManager* power;
     StatusLED* led;
-    SerialManagerUART* uart; // اضافه شدن سریال به پارامترهای تسک
+    SerialManagerUART* uart; 
 };
 
-// تابع تسک اصلی
+// --- تابع تسک اصلی ---
 void main_loop_task(void* pvParameters) {
+    // تبدیل پارامترها به ساختار مربوطه
     TaskParams* params = (TaskParams*)pvParameters;
-    // Keyboard* kb = params->kb;
-    // ADC_AD7191* adc = params->adc;
-    // DisplayTM1640* display = params->display;
-    // PowerManager* power = params->power;
-    // StatusLED* led = params->led;
-    SerialManagerUART* uart = params->uart;
+    
+    ESP_LOGI("MainLoop", "Main Loop Task Started.");
 
     while (true) {
-        // بررسی داده‌های دریافتی روی پورت سریال سخت‌افزاری (UART)
-        if (uart != nullptr) {
-            uart->checkUartRx();
+        // 1. بررسی داده‌های پورت سریال (UART)
+        if (params->uart != nullptr) {
+            params->uart->checkUartRx();
         }
-        // تاخیر ۲۰۰ میلی‌ثانیه
-        vTaskDelay(pdMS_TO_TICKS(200));
+
+        // 2. بررسی رویدادهای کیبورد از صف
+        if (keyboard_queue != nullptr) {
+            KeyEvent event;
+            // خواندن تمام رویدادهای موجود در صف (Non-blocking)
+            while (xQueueReceive(keyboard_queue, &event, 0) == pdTRUE) {
+                if (event.pressed) {
+                    // چاپ مختصات کلید فشرده شده
+                    ESP_LOGI("MainLoop", "Key Code = %d", event.key_index);
+                    }
+            }
+        }
+
+        // 3. سایر پردازش‌های دوره ای
+        // ...
+
+        // تاخیر ۲۰ میلی‌ثانیه برای جلوگیری از اشغال کامل پردازنده
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
-
 
 extern "C" void app_main(void)
 {
@@ -73,62 +90,59 @@ extern "C" void app_main(void)
     Logger::init();
     Logger::info("Scale Controller Starting...");
 
-    // 3. راه‌اندازی اولیه GPIO
+    // 3. راه‌اندازی اولیه GPIO (ریست اترنت)
+    gpio_reset_pin(GPIO_NUM_16);
     gpio_set_direction(GPIO_NUM_16, GPIO_MODE_OUTPUT);
     gpio_set_level(GPIO_NUM_16, 1);
-    vTaskDelay(500 / portTICK_PERIOD_MS); 
+    vTaskDelay(pdMS_TO_TICKS(100)); // تاخیر کوتاه برای پایداری
 
     // 4. راه‌اندازی ADC
     adc = new ADC_AD7191();
     adc->init();
 
-    // 5. راه‌اندازی USB Serial (TinyUSB)
-    Logger::info("Initializing USB CDC...");
+    // 5. راه‌اندازی Serial (USB & UART)
     usbSerial = new SerialManagerUSB(SerialProtocol::PROTOCOL_PAND);
-    usbSerial->init(); // این متد همه کارها (نصب درایور و راه‌اندازی پورت) را انجام می‌دهد
+    usbSerial->init(); 
     usbSerial->setAdcInstance(adc);
-    Logger::info("USB CDC Ready.");
 
-    // 5.1 راه‌اندازی UART Serial (سریال دوم)
-    // پین‌ها را بر اساس سخت‌افزار خود تنظیم کنید (مثلاً TX=4, RX=5)
-    Logger::info("Initializing UART Serial...");
     uartSerial = new SerialManagerUART(UART_NUM_1, SerialProtocol::PROTOCOL_PAND);
-    uartSerial->init(115200, 4, 5); // Baud=115200, TX=4, RX=5
+    uartSerial->init(115200, GPIO_NUM_4, GPIO_NUM_5); 
     uartSerial->setAdcInstance(adc);
-    Logger::info("UART Serial Ready.");
 
-    // 6. راه‌اندازی WebServer
+    // 6. راه‌اندازی شبکه و وب‌سرور
     myServer = new WebServer(
         WIFIMode::HYBRID,             
-        "MobinNet7665",                     
-        "31477665",                 
-        "ESP32_AP",                  
-        "12345678",                  
+        "MobinNet7665", "31477665",                 
+        "ESP32_AP", "12345678",                  
         "http://jahatpro.ir/posscale/ps.bin", 
-        "admin",                     
-        "admin"                      
+        "admin", "admin"                      
     );
-    
     myServer->setAdcInstance(adc);
     myServer->begin();
 
-    // 7. راه‌اندازی سایر ماژول‌ها
-    // Keyboard* kb = new Keyboard();
-    // DisplayTM1640* display = new DisplayTM1640();
-    // PowerManager* power = new PowerManager();
-    // StatusLED* led = new StatusLED();
+    // 7. راه‌اندازی Ethernet
+    ethManager = new EthernetManager();
+    ethManager->start();
 
-    // آماده‌سازی پارامترها برای تسک
-    TaskParams params = {
-        // .kb = kb,
-        // .adc = adc,
-        // .display = display,
-        // .power = power,
-        // .led = led,
-        .uart = uartSerial // اضافه کردن سریال به پارامترها
-    };
+    // 8. راه‌اندازی کیبورد (بسیار مهم: ابتدا صف، سپس کیبورد)
+    keyboard_queue = xQueueCreate(10, sizeof(KeyEvent));
+    if (keyboard_queue == nullptr) {
+        Logger::error("Failed to create keyboard queue!");
+    }
 
-    // 8. ساخت و شروع تسک اصلی
+    kb = new Keyboard();
+    kb->init(keyboard_queue);
+
+    // 9. آماده‌سازی پارامترها به صورت static (ماندگار در حافظه)
+    static TaskParams params; 
+    params.kb = kb;
+    params.adc = adc;
+    params.display = nullptr; 
+    params.power = nullptr;   
+    params.led = nullptr;     
+    params.uart = uartSerial;
+
+    // 10. ساخت تسک اصلی با اولویت ۵
     xTaskCreate(main_loop_task, "MainLoop", 4096, &params, 5, NULL);
 
     Logger::info("System Started Successfully.");

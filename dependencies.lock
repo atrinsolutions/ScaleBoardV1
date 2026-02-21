@@ -30,6 +30,12 @@ dependencies:
     - esp32p4
     - esp32h4
     version: 0.19.0~2
+  ethernet_init:
+    dependencies: []
+    source:
+      path: C:\Users\davoud\esp\v5.5.2\esp-idf\examples\ethernet\basic\components\ethernet_init
+      type: local
+    version: '*'
   idf:
     source:
       type: idf
@@ -38,7 +44,8 @@ direct_dependencies:
 - espressif/esp_tinyusb
 - espressif/mdns
 - espressif/tinyusb
+- ethernet_init
 - idf
-manifest_hash: bc31833d3fc88eb38e2a08fc0d9d6208980be6ba68d5bbc5c57daf5e6d40caf3
+manifest_hash: 10d2f394646b45c2fb13fb62ab2dff4e6af3286775422f8fa9614233ca288642
 target: esp32s3
 version: 2.0.0

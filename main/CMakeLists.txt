@@ -23,6 +23,7 @@ idf_component_register(
         "esp_https_ota"
         "esp_http_server"
         "esp_wifi"
+        "esp_eth"        
         "nvs_flash"
         "esp_event"
         "esp_netif"
